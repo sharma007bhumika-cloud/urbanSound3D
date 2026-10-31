@@ -386,3 +386,15 @@ a[data-testid="stPageLink-NavLink"]:hover {
 .disclaimer-banner b {
   color: #f59e0b;
 }
+/* Hide Streamlit floating status and deploy controls */
+[data-testid="stStatusWidget"] {
+    display: none !important;
+}
+
+.stDeployButton {
+    display: none !important;
+}
+
+[data-testid="stToolbar"] {
+    display: none !important;
+}
