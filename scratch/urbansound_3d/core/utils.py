@@ -76,6 +76,29 @@ def init_session_state():
             st.session_state["sim_baseline"] = sim_baseline
             st.session_state["sim_current"] = sim_baseline
 
+def render_mobile_navigation(show_settings_hint: bool = False):
+    """
+    Renders top navigation pill links visible ONLY on small mobile screens (<= 768px).
+    Desktop/laptop browsers hide this container via CSS media queries.
+    """
+    st.markdown('<div class="mobile-nav-container">', unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.page_link("Home.py", label="Home", icon="🏠")
+    with c2:
+        st.page_link("pages/1_Simulator.py", label="Simulator", icon="🔊")
+    with c3:
+        st.page_link("pages/2_Results_and_Compare.py", label="Results", icon="📊")
+    with c4:
+        st.page_link("pages/3_Day_vs_Night_Diurnals.py", label="Day/Night", icon="🌓")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    if show_settings_hint:
+        st.markdown(
+            '<div class="mobile-hint">💡 <b>Using a phone?</b> Tap the <b>&gt;</b> arrow at the top left to open controls.</div>',
+            unsafe_allow_html=True
+        )
+
 def generate_html_report(
     sim_data: Dict[str, Any],
     building_df: pd.DataFrame,

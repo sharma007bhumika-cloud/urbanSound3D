@@ -1,5 +1,5 @@
 # 🏙️ UrbanSound 3D: Noise Pollution Propagation Simulator
-> **3rd-Semester Engineering Project:** *Simulation Framework for Noise Pollution Propagation Analysis in Urban Areas*
+> *Simulation Framework for Noise Pollution Propagation Analysis in Urban Areas*
 
 **UrbanSound 3D** is an open-source, interactive, physics-driven web simulation platform built entirely in **Python**. It models outdoor acoustic noise propagation across complex 3D urban geometries according to a simplified **ISO 9613-2** engineering framework.
 
@@ -29,6 +29,12 @@ The platform empowers urban planners, civil engineers, acoustic researchers, and
    - Side-by-side Before vs After mitigation comparison and spatial noise reduction ($\Delta \text{dB}$) heatmap.
    - 24-Hour diurnal traffic curve modeling day and night exposure cycles with international $L_{\text{den}}$ composite indicators.
    - One-click exports: Full HTML Environmental Audit Report, Building Facade CSV, and Grid SPL CSV.
+
+4. **Day vs Night & Diurnal Dynamics (`pages/3_Day_vs_Night_Diurnals.py`)**:
+   - Side-by-side daytime vs nighttime spatial noise contour heatmaps.
+   - Interactive 24-hour time scrubber with rush hour and nocturnal quiet tracking.
+   - Continuous 24-hour diurnal noise trajectory vs statutory limits and WHO sleep guidelines.
+   - Per-building nocturnal facade exposure Pass/Fail audit.
 
 ---
 
@@ -76,7 +82,8 @@ urbansound_3d/
 ├── Home.py                       # Animated scroll-story landing page & interactive mini-demo
 ├── pages/
 │   ├── 1_Simulator.py            # Live 3D/2D acoustic simulation studio & virtual probe
-│   └── 2_Results_and_Compare.py  # Regulatory compliance, before/after compare, diurnal cycles & export
+│   ├── 2_Results_and_Compare.py  # Regulatory compliance, before/after compare, diurnal cycles & export
+│   └── 3_Day_vs_Night_Diurnals.py # Day vs night heatmaps, 24-hour scrubber, nocturnal sleep audit
 ├── core/
 │   ├── __init__.py
 │   ├── propagation.py            # Vectorized ISO 9613-2 calculation engine
@@ -92,8 +99,3 @@ urbansound_3d/
 ├── requirements.txt              # Pinned Python package dependencies
 └── README.md                     # Documentation & execution guide
 ```
-
----
-
-## ⚠️ Academic Disclaimer
-*UrbanSound 3D is developed as an academic simulation framework for an engineering curriculum project. It implements a simplified, broadband A-weighted equivalent acoustic engineering approximation for educational demonstration and spatial comparative planning. It is not an ISO-certified regulatory instrument.*

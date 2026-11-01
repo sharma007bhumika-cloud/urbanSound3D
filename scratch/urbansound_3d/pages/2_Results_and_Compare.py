@@ -20,10 +20,9 @@ from core.visualization import (
     build_2d_heatmap_plot,
     build_3d_city_scene,
     build_scenario_difference_plot,
-    build_diurnal_24hr_chart,
     DARK_LAYOUT_TEMPLATE
 )
-from core.utils import init_session_state, generate_html_report
+from core.utils import init_session_state, generate_html_report, render_mobile_navigation
 
 st.set_page_config(
     page_title="UrbanSound 3D - Results & Scenario Compare",
@@ -40,8 +39,11 @@ if os.path.exists(css_path):
 
 init_session_state()
 
-st.title("📊 Acoustic Analysis, Compliance & Scenario Studio")
-st.caption("Quantitative audit of spatial noise distribution, regulatory threshold compliance, and mitigation effectiveness.")
+# Mobile top navigation bar (visible only on small screens <= 768px)
+render_mobile_navigation(show_settings_hint=True)
+
+st.title("📊 Noise Check & Before/After Comparison")
+st.caption("Check if your neighborhood meets legal pollution limits, compare noise before and after adding barriers, and download reports.")
 
 # Check if simulation data exists
 if "sim_current" not in st.session_state:
@@ -52,22 +54,40 @@ sim_current = st.session_state["sim_current"]
 sim_baseline = st.session_state.get("sim_baseline", sim_current)
 city = sim_current["city"]
 
+# How to use this page
+st.info("""
+**How to use this page (in 3 easy steps):**
+1. **Pick your area type** in the sidebar on the left (e.g. *Residential Area* where people live, or *Silence Zone* near hospitals).
+2. **Compare Before vs After** to see how much sound barriers or traffic cuts lowered noise levels.
+3. **Check building walls or download full reports** for official planning and school projects.
+""")
+
 # ----------------- COMPLIANCE AUDIT CONTROLS -----------------
 with st.sidebar:
-    st.markdown("### ⚖️ Regulatory Standard")
+    st.markdown("### ⚖️ Legal Noise Limits")
     zone_choice = st.selectbox(
         "Designated Zoning Type",
         list(CPCB_STANDARDS.keys()),
         index=2, # Residential Area by default
-        help="Central Pollution Control Board (CPCB) India ambient noise standards. Verify values against official CPCB notification."
+        format_func=lambda x: {
+            "Industrial Area": "Industrial Area (factories & plants)",
+            "Commercial Area": "Commercial Area (markets & shops)",
+            "Residential Area": "Residential Area (homes & apartments)",
+            "Silence Zone": "Silence Zone (hospitals & schools)"
+        }.get(x, x),
+        help="Central Pollution Control Board (CPCB) India ambient noise standards. Different areas have different legal limits."
     )
-    time_setting = st.radio("Standard Time of Day", ["Day (06:00 - 22:00)", "Night (22:00 - 06:00)"])
+    time_setting = st.radio(
+        "Standard Time of Day",
+        ["Day (06:00 - 22:00)", "Night (22:00 - 06:00)"],
+        help="Night limits are stricter to ensure quiet sleep."
+    )
     tod_key = "day" if "Day" in time_setting else "night"
     cpcb_threshold = get_cpcb_limit(zone_choice, tod_key)
     
     st.markdown(f"""
     <div class="glass-card" style="padding:14px; margin-top:10px;">
-        <div style="font-size:0.8rem; color:#94a3b8;">CPCB REGULATORY LIMIT</div>
+        <div style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase;">CPCB LEGAL LIMIT</div>
         <div style="font-size:1.8rem; font-weight:800; color:#38bdf8; font-family:'JetBrains Mono';">{cpcb_threshold} dB(A)</div>
         <div style="font-size:0.75rem; color:#64748b;">{CPCB_STANDARDS[zone_choice]['description']}</div>
     </div>
@@ -97,52 +117,69 @@ bld_total = len(bld_df)
 kpi_html = f"""
 <div class="kpi-container">
     <div class="kpi-card">
-        <div class="kpi-title">Max Observed Level</div>
+        <div class="kpi-title">Loudest Spot</div>
         <div class="kpi-value">{max_db:.1f} <span style="font-size:1rem; color:#94a3b8;">dB(A)</span></div>
-        <div class="kpi-sub">CPCB Limit: {cpcb_threshold} dB(A)</div>
+        <div class="kpi-sub">Legal Limit: {cpcb_threshold} dB(A)</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-title">Spatial Mean Leq</div>
+        <div class="kpi-title">Average Area Noise</div>
         <div class="kpi-value">{mean_db:.1f} <span style="font-size:1rem; color:#94a3b8;">dB(A)</span></div>
-        <div class="kpi-sub">Across entire 300x300m sector</div>
+        <div class="kpi-sub">Across the entire neighborhood</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-title">Area in Non-Compliance</div>
+        <div class="kpi-title">Area Over the Limit</div>
         <div class="kpi-value" style="color: {'#ef4444' if violation_pct > 25 else '#10b981'};">{violation_pct:.1f}%</div>
-        <div class="kpi-sub">{violating_pts:,} of {total_pts:,} grid cells</div>
+        <div class="kpi-sub">{violating_pts:,} of {total_pts:,} test spots exceed limit</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-title">Buildings in Violation</div>
+        <div class="kpi-title">Buildings Over the Limit</div>
         <div class="kpi-value" style="color: {'#ef4444' if bld_fails > 0 else '#10b981'};">{bld_fails} <span style="font-size:1rem; color:#94a3b8;">/ {bld_total}</span></div>
-        <div class="kpi-sub">Exceeding facade threshold</div>
+        <div class="kpi-sub">Outside walls too loud</div>
     </div>
 </div>
 """
 st.markdown(kpi_html, unsafe_allow_html=True)
 
+# Status explainer under KPI strip
+if violation_pct == 0:
+    comp_status = "Safe: 100% of the neighborhood is within the legal limit set by CPCB (Central Pollution Control Board)."
+    comp_color = "#10b981"
+elif violation_pct <= 25:
+    comp_status = f"A bit loud: {violation_pct:.1f}% of the area exceeds the legal limit, mostly near traffic roads."
+    comp_color = "#f59e0b"
+else:
+    comp_status = f"Too loud: {violation_pct:.1f}% of the neighborhood is over the legal limit. Sound barriers or traffic limits are recommended."
+    comp_color = "#ef4444"
+
+st.markdown(f"""
+<div style="background:rgba(30,41,59,0.5); border-left:4px solid {comp_color}; padding:10px 14px; border-radius:6px; margin: 12px 0 20px 0;">
+    <b>In simple words:</b> {comp_status}
+</div>
+""", unsafe_allow_html=True)
+
 # ----------------- TABS FOR RESULTS & COMPARISON -----------------
 res_tab1, res_tab2, res_tab3, res_tab4, res_tab5 = st.tabs([
-    "⚖️ Regulatory Compliance & Facades",
-    "🔄 Before vs After Mitigation",
-    "📈 Statistical & Distribution Curves",
-    "🌙 Day vs Night Diurnal Profiles",
-    "📥 Export Audit Reports"
+    "⚖️ Is the Noise Legal? (Zoning Check)",
+    "🔄 Before vs After Reducing Noise",
+    "📈 Noise Distribution Graphs",
+    "🌙 Noise Through Day and Night",
+    "📥 Download Audit Reports"
 ])
 
 with res_tab1:
-    st.markdown("#### Urban Zoning Compliance Assessment")
-    st.caption(f"Spatial distribution of sound levels audited against the **{zone_choice}** limit of **{cpcb_threshold} dB(A)**.")
+    st.markdown(f"#### Legal Noise Limit Check for {zone_choice}")
+    st.caption(f"Comparing sound across the area against the legal limit of **{cpcb_threshold} dB(A)** set by CPCB (India's Central Pollution Control Board).")
     
     col_map, col_chart = st.columns([3, 2])
     with col_map:
         fig_comp_2d = build_2d_heatmap_plot(sim_current, cpcb_limit=cpcb_threshold, colorblind_mode=st.session_state["colorblind_mode"])
-        st.plotly_chart(fig_comp_2d, use_container_width=True, key="res_comp_2d")
+        st.plotly_chart(fig_comp_2d, width="stretch", key="res_comp_2d")
         
     with col_chart:
         st.markdown("##### Zone Compliance Summary")
         comp_df = pd.DataFrame([
-            {"Status": "Compliant Area", "Percentage": round(100.0 - violation_pct, 1), "Color": "#10b981"},
-            {"Status": "Non-Compliant Violation", "Percentage": round(violation_pct, 1), "Color": "#ef4444"}
+            {"Status": "Within Legal Limit", "Percentage": round(100.0 - violation_pct, 1), "Color": "#10b981"},
+            {"Status": "Over Legal Limit", "Percentage": round(violation_pct, 1), "Color": "#ef4444"}
         ])
         fig_donut = go.Figure(data=[go.Pie(
             labels=comp_df["Status"],
@@ -158,33 +195,33 @@ with res_tab1:
             margin=dict(l=10, r=10, t=10, b=10),
             showlegend=False
         )
-        st.plotly_chart(fig_donut, use_container_width=True, key="res_donut")
+        st.plotly_chart(fig_donut, width="stretch", key="res_donut")
         
         # WHO Comparison Card
         st.markdown(f"""
         <div class="glass-card" style="padding:14px;">
-            <div style="font-weight:700; color:#38bdf8; margin-bottom:6px;">WHO Environmental Guideline Check</div>
-            <div style="font-size:0.85rem; color:#cbd5e1;">WHO recommends road traffic noise below <b>53 dB Lden</b> to prevent adverse physiological and cognitive impacts.</div>
+            <div style="font-weight:700; color:#38bdf8; margin-bottom:6px;">World Health Organization (WHO) Health Check</div>
+            <div style="font-size:0.85rem; color:#cbd5e1;">WHO recommends road traffic noise stay below <b>53 dB(A)</b> to prevent high blood pressure, heart strain, and poor sleep.</div>
             <div style="font-size:0.85rem; margin-top:8px; color:{'#ef4444' if mean_db > 53 else '#10b981'}; font-weight:700;">
-                Current Sector Mean: {mean_db:.1f} dB(A) ({'EXCEEDS WHO GUIDELINE' if mean_db > 53 else 'MEETS WHO GUIDELINE'})
+                Current Neighborhood Average: {mean_db:.1f} dB(A) ({'EXCEEDS WHO HEALTHY TARGET' if mean_db > 53 else 'MEETS WHO HEALTHY TARGET'})
             </div>
         </div>
         """, unsafe_allow_html=True)
         
+    st.caption(f"**In simple words:** The green slice shows the {100.0 - violation_pct:.1f}% of the area that is safe and legal. The red slice ({violation_pct:.1f}%) is louder than the law allows for a {zone_choice.lower()}.")
+
     st.markdown("---")
-    st.markdown("#### Building Facade Exposure Table")
-    st.caption("Acoustic impact evaluated across perimeter receivers at 1.5m height. Buildings sorted by maximum facade exposure.")
+    st.markdown("#### Noise on Building Outside Walls (Facade Exposure)")
+    st.caption("How much noise reaches the outside walls of each building at ear height (1.5 meters). Sorted with the loudest building first.")
     
     if not bld_df.empty:
-        # Style the dataframe
-        def highlight_status(val):
-            return "color: #ef4444; font-weight: bold;" if val == "FAIL" else "color: #10b981; font-weight: bold;"
         styled_df = bld_df.sort_values(by="max_facade_db", ascending=False).reset_index(drop=True)
-        st.dataframe(styled_df, use_container_width=True)
+        st.dataframe(styled_df, width="stretch")
+        st.caption(f"**In simple words:** Buildings marked 'FAIL' experience noise above {cpcb_threshold} dB(A) on their outside walls. Installing sound barriers or keeping windows closed can protect the people inside.")
 
 with res_tab2:
-    st.markdown("#### Before vs After Mitigation Scenario Comparison")
-    st.caption("Compare baseline conditions with implemented mitigation measures (sound barrier walls, traffic reduction, green buffers).")
+    st.markdown("#### Before vs After Putting Up Noise Barriers")
+    st.caption("Compare baseline noise conditions with your added sound barriers and traffic reduction policies.")
     
     # Delta calculations
     mean_baseline = float(np.mean(sim_baseline["L_total"]))
@@ -199,55 +236,56 @@ with res_tab2:
     delta_color = "#10b981" if delta_mean >= 1.0 else "#94a3b8"
     st.markdown(f"""
     <div class="glass-card" style="border-left: 5px solid {delta_color};">
-        <h4 style="margin:0 0 10px 0; color:#38bdf8;">Mitigation Impact Summary</h4>
+        <h4 style="margin:0 0 10px 0; color:#38bdf8;">Noise Reduction Summary</h4>
         <div style="display:flex; gap:30px; flex-wrap:wrap;">
             <div>
-                <span style="font-size:0.85rem; color:#94a3b8;">Average Sound Reduction:</span><br>
-                <b style="font-size:1.6rem; color:{delta_color}; font-family:'JetBrains Mono';">+{delta_mean:.1f} dB(A)</b>
+                <span style="font-size:0.85rem; color:#94a3b8;">Average Sound Dropped:</span><br>
+                <b style="font-size:1.6rem; color:{delta_color}; font-family:'JetBrains Mono';">+{delta_mean:.1f} dB(A) quieter</b>
             </div>
             <div>
-                <span style="font-size:0.85rem; color:#94a3b8;">Reduction in Area Violations:</span><br>
-                <b style="font-size:1.6rem; color:{delta_color}; font-family:'JetBrains Mono';">-{delta_viol:.1f}%</b>
+                <span style="font-size:0.85rem; color:#94a3b8;">Drop in Illegal Area:</span><br>
+                <b style="font-size:1.6rem; color:{delta_color}; font-family:'JetBrains Mono';">-{delta_viol:.1f}% less area in violation</b>
             </div>
             <div>
-                <span style="font-size:0.85rem; color:#94a3b8;">Active Barrier Status:</span><br>
-                <b style="font-size:1.1rem; color:#f8fafc;">{'4.5m Acoustic Wall Erected' if st.session_state['mitigation_params']['barrier_enabled'] else 'No Barrier'}</b>
+                <span style="font-size:0.85rem; color:#94a3b8;">Sound Barrier Status:</span><br>
+                <b style="font-size:1.1rem; color:#f8fafc;">{'Sound Barrier Wall in Place' if st.session_state['mitigation_params']['barrier_enabled'] else 'No Barrier'}</b>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
     # Side-by-side or Difference map
-    comp_mode = st.radio("Comparison Visualization View", ["Side-by-Side 3D Views", "Spatial Noise Reduction Heatmap (Baseline - Mitigated)"], horizontal=True)
+    comp_mode = st.radio("Comparison View", ["Side-by-Side 3D Views", "Noise Reduction Map (How Much Sound was Blocked)"], horizontal=True)
     
     if comp_mode == "Side-by-Side 3D Views":
         col_b, col_m = st.columns(2)
         with col_b:
-            st.markdown("##### 1. Baseline Scenario (Unmitigated)")
+            st.markdown("##### 1. Before (Baseline Without Barriers)")
             fig_b3d = build_3d_city_scene(sim_baseline, colorblind_mode=st.session_state["colorblind_mode"])
-            st.plotly_chart(fig_b3d, use_container_width=True, key="res_b3d")
+            st.plotly_chart(fig_b3d, width="stretch", key="res_b3d")
         with col_m:
-            st.markdown("##### 2. Mitigated Scenario (With Interventions)")
+            st.markdown("##### 2. After (With Sound Barriers & Mitigations)")
             fig_m3d = build_3d_city_scene(sim_current, colorblind_mode=st.session_state["colorblind_mode"])
-            st.plotly_chart(fig_m3d, use_container_width=True, key="res_m3d")
+            st.plotly_chart(fig_m3d, width="stretch", key="res_m3d")
     else:
-        st.markdown("##### Spatial Decibel Reduction Heatmap")
-        st.caption("Positive green-yellow regions indicate decibels mitigated by barriers or traffic policies.")
+        st.markdown("##### Noise Reduction Heatmap")
+        st.caption("Green and yellow areas show where sound dropped most thanks to the barrier wall and traffic cuts.")
         fig_diff = build_scenario_difference_plot(sim_baseline, sim_current)
-        st.plotly_chart(fig_diff, use_container_width=True, key="res_diff")
+        st.plotly_chart(fig_diff, width="stretch", key="res_diff")
         
-    # Auto-generated textual engineering conclusion
-    st.markdown("##### 📝 Automated Engineering Assessment")
+    st.caption(f"**In simple words:** The measures lowered average neighborhood noise by **{delta_mean:.1f} dB(A)**. Every 3 dB drop cuts sound energy in half, making a clear difference for residents.")
+
+    st.markdown("##### 📝 Plain-Language Assessment")
     conclusion_text = (
-        f"Installation of the simulated mitigation measures achieved an average acoustic reduction of **{delta_mean:.1f} dB(A)** "
-        f"across the study area. Area non-compliance with the {zone_choice} standard shifted from **{viol_base:.1f}%** down to **{viol_mit:.1f}%**. "
-        f"Screening from the barrier wall notably protects lower-floor residential facades behind the transit corridor, while distance and ground absorption provide supplemental natural attenuation."
+        f"Adding these mitigations reduced average sound by **{delta_mean:.1f} dB(A)** across the area. "
+        f"The area exceeding the legal limit dropped from **{viol_base:.1f}%** down to **{viol_mit:.1f}%**. "
+        f"The barrier wall protects lower floors and gardens directly behind the road, while trees and distance help absorb additional sound."
     )
     st.info(conclusion_text)
 
 with res_tab3:
-    st.markdown("#### Statistical Noise Distributions")
-    st.caption("Analyze cumulative exposure probability and decibel frequency spectrum.")
+    st.markdown("#### Noise Level Graphs (How Many Spots Are Quiet vs Loud)")
+    st.caption("See the spread of noise across all measurement points in the neighborhood.")
     
     col_hist, col_cdf = st.columns(2)
     with col_hist:
@@ -258,7 +296,7 @@ with res_tab3:
             nbinsx=35,
             marker_color="#38bdf8",
             opacity=0.8,
-            name="Grid Distribution"
+            name="Measurement Spots"
         ))
         fig_hist.add_vline(x=cpcb_threshold, line_width=2.5, line_dash="dash", line_color="#ef4444", annotation_text=f"CPCB Limit ({cpcb_threshold} dB)")
         fig_hist.update_layout(
@@ -266,11 +304,11 @@ with res_tab3:
             paper_bgcolor=DARK_LAYOUT_TEMPLATE["paper_bgcolor"],
             plot_bgcolor=DARK_LAYOUT_TEMPLATE["plot_bgcolor"],
             font=DARK_LAYOUT_TEMPLATE["font"],
-            title="Histogram of Decibel Levels Across Grid",
-            xaxis=dict(title="Sound Level dB(A)"),
-            yaxis=dict(title="Count of Grid Nodes")
+            title="Spread of Sound Levels Across the Neighborhood",
+            xaxis=dict(title="Sound Level dB(A) (Loudness)"),
+            yaxis=dict(title="Number of Map Spots")
         )
-        st.plotly_chart(fig_hist, use_container_width=True, key="res_hist")
+        st.plotly_chart(fig_hist, width="stretch", key="res_hist")
         
     with col_cdf:
         sorted_levels = np.sort(flat_levels)
@@ -282,7 +320,7 @@ with res_tab3:
             y=cdf,
             mode="lines",
             line=dict(color="#10b981", width=3),
-            name="Cumulative Exposure CDF"
+            name="% of Area Quieter Than X dB"
         ))
         fig_cdf.add_vline(x=cpcb_threshold, line_width=2.5, line_dash="dash", line_color="#ef4444")
         fig_cdf.update_layout(
@@ -290,15 +328,25 @@ with res_tab3:
             paper_bgcolor=DARK_LAYOUT_TEMPLATE["paper_bgcolor"],
             plot_bgcolor=DARK_LAYOUT_TEMPLATE["plot_bgcolor"],
             font=DARK_LAYOUT_TEMPLATE["font"],
-            title="Cumulative Distribution Function (% Area Below X dB)",
+            title="Cumulative Percentage (% Area Below Each Decibel Level)",
             xaxis=dict(title="Sound Level dB(A)"),
-            yaxis=dict(title="% of Area Below Level", range=[0, 105])
+            yaxis=dict(title="% of Area Below this Level", range=[0, 105])
         )
-        st.plotly_chart(fig_cdf, use_container_width=True, key="res_cdf")
+        st.plotly_chart(fig_cdf, width="stretch", key="res_cdf")
+
+    st.caption(f"**In simple words:** The blue bars show how many spots on the map have each loudness level. The red dashed line marks the CPCB legal limit ({cpcb_threshold} dB(A)). Spots to the right of the line are louder than the law allows.")
+
+    with st.expander("Technical details (for students and experts)"):
+        st.markdown("""
+        **Statistical Acoustic Percentiles:**
+        - **$L_{10}$**: Sound level exceeded for 10% of the area (peak noise exposure).
+        - **$L_{50}$**: Median sound level across the spatial grid.
+        - **$L_{90}$**: Background ambient sound floor.
+        """)
 
 with res_tab4:
-    st.markdown("#### 🌙 Day vs Night & 24-Hour Diurnal Dynamics")
-    st.caption("Temporal acoustic progression, diurnal rush-hour cycles, composite Lden indicators, and nocturnal sleep guidelines.")
+    st.markdown("#### 🌙 Noise Through Day and Night")
+    st.caption("How noise changes across the 24 hours of the day, rush hour spikes, and quiet sleep periods.")
     
     # 24-Hour profile calculations
     hours = np.arange(24)
@@ -319,34 +367,34 @@ with res_tab4:
     with d_c1:
         st.markdown(f"""
         <div style="background:rgba(30,41,59,0.7); border:1px solid rgba(56,189,248,0.3); border-radius:10px; padding:12px; text-align:center;">
-            <div style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase;">Daytime Leq (06-22h)</div>
+            <div style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase;">Daytime Noise (06-22h)</div>
             <div style="font-size:1.8rem; font-weight:800; color:#f59e0b; font-family:'JetBrains Mono';">{mean_db:.1f} dB</div>
-            <div style="font-size:0.75rem; color:#cbd5e1;">CPCB Standard: {get_cpcb_limit(zone_choice, 'day')} dB</div>
+            <div style="font-size:0.75rem; color:#cbd5e1;">CPCB Limit: {get_cpcb_limit(zone_choice, 'day')} dB</div>
         </div>
         """, unsafe_allow_html=True)
     with d_c2:
         st.markdown(f"""
         <div style="background:rgba(30,41,59,0.7); border:1px solid rgba(56,189,248,0.3); border-radius:10px; padding:12px; text-align:center;">
-            <div style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase;">Nighttime Leq (22-06h)</div>
+            <div style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase;">Nighttime Noise (22-06h)</div>
             <div style="font-size:1.8rem; font-weight:800; color:#10b981; font-family:'JetBrains Mono';">{night_mean_db:.1f} dB</div>
-            <div style="font-size:0.75rem; color:#cbd5e1;">CPCB Standard: {get_cpcb_limit(zone_choice, 'night')} dB</div>
+            <div style="font-size:0.75rem; color:#cbd5e1;">CPCB Limit: {get_cpcb_limit(zone_choice, 'night')} dB</div>
         </div>
         """, unsafe_allow_html=True)
     with d_c3:
         st.markdown(f"""
         <div style="background:rgba(30,41,59,0.7); border:1px solid rgba(56,189,248,0.3); border-radius:10px; padding:12px; text-align:center;">
-            <div style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase;">Composite Indicator Lden</div>
+            <div style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase;">Full-Day Score (Lden)</div>
             <div style="font-size:1.8rem; font-weight:800; color:#38bdf8; font-family:'JetBrains Mono';">{l_den:.1f} dB</div>
-            <div style="font-size:0.75rem; color:#cbd5e1;">Includes +5dB (Eve) & +10dB (Night)</div>
+            <div style="font-size:0.75rem; color:#cbd5e1;">Overall 24h score with evening/night weight</div>
         </div>
         """, unsafe_allow_html=True)
     with d_c4:
         drop_val = mean_db - night_mean_db
         st.markdown(f"""
         <div style="background:rgba(30,41,59,0.7); border:1px solid rgba(56,189,248,0.3); border-radius:10px; padding:12px; text-align:center;">
-            <div style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase;">Nocturnal Quiet Drop</div>
+            <div style="font-size:0.8rem; color:#94a3b8; text-transform:uppercase;">Nighttime Quiet Drop</div>
             <div style="font-size:1.8rem; font-weight:800; color:#34d399; font-family:'JetBrains Mono';">-{drop_val:.1f} dB</div>
-            <div style="font-size:0.75rem; color:#cbd5e1;">Natural night traffic attenuation</div>
+            <div style="font-size:0.75rem; color:#cbd5e1;">Natural night traffic drop</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -375,7 +423,7 @@ with res_tab4:
     ))
     fig_diurnal.add_trace(go.Scatter(
         x=hours, y=who_sleep, mode="lines",
-        name="WHO Restful Sleep Guideline (40 dB)",
+        name="WHO Sleep Target (40 dB)",
         line=dict(color="#10b981", width=2, dash="dot")
     ))
     fig_diurnal.update_layout(
@@ -383,29 +431,31 @@ with res_tab4:
         paper_bgcolor=DARK_LAYOUT_TEMPLATE["paper_bgcolor"],
         plot_bgcolor=DARK_LAYOUT_TEMPLATE["plot_bgcolor"],
         font=DARK_LAYOUT_TEMPLATE["font"],
-        title="24-Hour Diurnal Exposure vs CPCB Day/Night Limits & WHO Restful Sleep Standard",
-        xaxis=dict(title="Hour of Day (00:00 - 23:00)", tickmode="linear", dtick=2),
-        yaxis=dict(title="Sound Level dB(A)", range=[30, max(80, max_curr + 2)]),
+        title="24-Hour Noise Profile vs CPCB Day/Night Limits & WHO Sleep Guideline",
+        xaxis=dict(title="Hour of Day (00:00 to 23:00)", tickmode="linear", dtick=2),
+        yaxis=dict(title="Sound Level dB(A)", range=[30, max(80, max_db + 2)]),
         legend=dict(orientation="h", y=1.12, x=0.05)
     )
-    st.plotly_chart(fig_diurnal, use_container_width=True, key="res_diurnal")
+    st.plotly_chart(fig_diurnal, width="stretch", key="res_diurnal")
     
+    st.caption("**In simple words:** Sound drops naturally at night because fewer cars are on the road. The green dotted line is the WHO 40 dB sleep recommendation for uninterrupted rest.")
+
     # Interactive hour inspector slider
-    st.markdown("##### 🕒 Hourly Diurnal Inspector")
+    st.markdown("##### 🕒 Check Any Hour of the Day")
     ins_hour = st.slider("Select Time of Day to Inspect", min_value=0, max_value=23, value=8, step=1, key="slider_ins_hour")
     traffic_frac = factors[ins_hour] * 100.0
     hour_val = hourly_spl[ins_hour]
     h_limit = cpcb_night if (ins_hour < 6 or ins_hour >= 22) else cpcb_day
-    h_status = "COMPLIANT" if hour_val <= h_limit else "EXCEEDANCE"
+    h_status = "Safe / Within Legal Limit" if hour_val <= h_limit else "Too Loud / Over Legal Limit"
     st.info(
-        f"**{ins_hour:02d}:00 Clock Time:** Traffic volume is at **{traffic_frac:.0f}%** of daytime peak. "
-        f"Estimated area sound level is **{hour_val:.1f} dB(A)** against regulatory limit of **{h_limit} dB(A)** "
+        f"**At {ins_hour:02d}:00 clock time:** Traffic flow is at **{traffic_frac:.0f}%** of daytime peak. "
+        f"Estimated area sound level is **{hour_val:.1f} dB(A)** against legal limit of **{h_limit} dB(A)** "
         f"({h_status})."
     )
 
 with res_tab5:
-    st.markdown("#### Export Audit & Simulation Reports")
-    st.caption("Download simulation data, facade records, and comprehensive HTML environmental compliance documentation.")
+    st.markdown("#### Download Audit & Planning Reports")
+    st.caption("Download simulation data, building wall records, and complete HTML environmental compliance reports.")
     
     exp_c1, exp_c2, exp_c3 = st.columns(3)
     with exp_c1:
@@ -422,23 +472,23 @@ with res_tab5:
             data=html_report,
             file_name="UrbanSound3D_Noise_Audit_Report.html",
             mime="text/html",
-            use_container_width=True
+            width="stretch"
         )
         
     with exp_c2:
-        st.markdown("##### 2. Building Facade CSV")
+        st.markdown("##### 2. Building Walls CSV")
         if not bld_df.empty:
             csv_bld = bld_df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="📊 Download Facade CSV",
+                label="📊 Download Building CSV",
                 data=csv_bld,
                 file_name="UrbanSound3D_Facade_Compliance.csv",
                 mime="text/csv",
-                use_container_width=True
+                width="stretch"
             )
             
     with exp_c3:
-        st.markdown("##### 3. Grid Coordinates & SPL CSV")
+        st.markdown("##### 3. Full Map Grid CSV")
         grid_df = pd.DataFrame({
             "X_m": sim_current["X"].flatten(),
             "Y_m": sim_current["Y"].flatten(),
@@ -446,9 +496,9 @@ with res_tab5:
         })
         csv_grid = grid_df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="🗺️ Download Grid SPL CSV",
+            label="🗺️ Download Grid Noise CSV",
             data=csv_grid,
             file_name="UrbanSound3D_Grid_NoiseField.csv",
             mime="text/csv",
-            use_container_width=True
+            width="stretch"
         )

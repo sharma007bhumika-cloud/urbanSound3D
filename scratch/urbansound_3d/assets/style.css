@@ -398,3 +398,105 @@ a[data-testid="stPageLink-NavLink"]:hover {
 [data-testid="stToolbar"] {
     display: none !important;
 }
+
+/* ---------------- MOBILE & RESPONSIVE NAVIGATION STYLES ---------------- */
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"] {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 999999 !important;
+  top: 12px !important;
+  left: 12px !important;
+}
+
+[data-testid="stSidebarCollapsedControl"] button,
+[data-testid="collapsedControl"] button {
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1.5px solid #38bdf8 !important;
+  border-radius: 8px !important;
+  color: #38bdf8 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5) !important;
+  cursor: pointer !important;
+}
+
+[data-testid="stSidebarCollapsedControl"] svg,
+[data-testid="collapsedControl"] svg {
+  fill: #38bdf8 !important;
+  color: #38bdf8 !important;
+  width: 22px !important;
+  height: 22px !important;
+}
+
+/* Hide mobile navigation and hint on laptops */
+@media (min-width: 769px) {
+  .mobile-nav-container {
+    display: none !important;
+  }
+  .mobile-hint {
+    display: none !important;
+  }
+}
+
+/* Show mobile top navigation bar on screens <= 768px (phones & small tablets) */
+@media (max-width: 768px) {
+  .mobile-nav-container {
+    display: block !important;
+    background: rgba(15, 23, 42, 0.92) !important;
+    border: 1px solid rgba(56, 189, 248, 0.3) !important;
+    border-radius: 12px !important;
+    padding: 8px 10px !important;
+    margin-bottom: 14px !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+  }
+  
+  .mobile-nav-container [data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+  }
+  
+  .mobile-nav-container a[data-testid="stPageLink-NavLink"] {
+    padding: 6px 4px !important;
+    font-size: 0.8rem !important;
+    text-align: center !important;
+    border-radius: 6px !important;
+  }
+  
+  .mobile-hint {
+    display: block !important;
+    background: rgba(56, 189, 248, 0.12) !important;
+    border-left: 3px solid #38bdf8 !important;
+    border-radius: 0 8px 8px 0 !important;
+    padding: 10px 14px !important;
+    margin-bottom: 16px !important;
+    font-size: 0.85rem !important;
+    color: #e2e8f0 !important;
+  }
+
+  /* Responsive layout fits 390px phone screens cleanly */
+  .kpi-container {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  .kpi-card {
+    padding: 14px !important;
+  }
+  
+  .kpi-value {
+    font-size: 1.8rem !important;
+  }
+  
+  .glass-card {
+    padding: 16px !important;
+  }
+  
+  .stApp {
+    overflow-x: hidden !important;
+  }
+}
